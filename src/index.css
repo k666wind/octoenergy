@@ -1,0 +1,82 @@
+@import "tailwindcss";
+
+:root {
+  --color-bg:        #0f0f1a;
+  --color-surface:   #1a1a2e;
+  --color-card:      #16213e;
+  --color-border:    #2a2a4a;
+  --color-elec:      #f59e0b;
+  --color-gas:       #22d3ee;
+  --color-solar:     #facc15;
+  --color-accent:    #e040fb;
+  --color-text:      #e2e8f0;
+  --color-muted:     #94a3b8;
+  --color-success:   #34d399;
+  --color-danger:    #f87171;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: 'Inter', system-ui, sans-serif;
+  margin: 0;
+  min-height: 100vh;
+}
+
+.card {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 1.25rem;
+}
+
+.btn-primary {
+  background: var(--color-accent);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 0.6rem 1.2rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.btn-primary:hover { opacity: 0.85; }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btn-secondary {
+  background: transparent;
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0.6rem 1.2rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-secondary:hover { background: var(--color-border); }
+
+.input-field {
+  width: 100%;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0.6rem 0.875rem;
+  color: var(--color-text);
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.input-field:focus { border-color: var(--color-accent); }
+.input-field::placeholder { color: var(--color-muted); }
+
+.label { color: var(--color-muted); font-size: 0.8rem; margin-bottom: 0.3rem; display: block; }
+
+.elec-accent { color: var(--color-elec); }
+.gas-accent  { color: var(--color-gas);  }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--color-bg); }
+::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 3px; }
