@@ -72,16 +72,16 @@ export function TrendsPage() {
   const gasAll = cache.gasConsumption?.data ?? []
   const outAll = cache.outgoingConsumption?.data ?? []
 
-  // Derived available months and years from cache
+  // Generate month options: from 24 months ago to current month
   const availableMonths = useMemo(() => {
-    const months = new Set(elecAll.map(i => i.interval_start.slice(0, 7)))
-    return Array.from(months).sort()
-  }, [elecAll])
-
-  const availableYears = useMemo(() => {
-    const years = new Set(elecAll.map(i => parseInt(i.interval_start.slice(0, 4))))
-    return Array.from(years).sort()
-  }, [elecAll])
+    const months: string[] = []
+    const now = new Date()
+    for (let i = 23; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+    }
+    return months
+  }, [])
 
   // On-demand fetch for range when dates change (day view) or month/year outside cache
   const doFetchRange = useCallback(async (from: string, to: string) => {
@@ -97,6 +97,39 @@ export function TrendsPage() {
       setIsFetchingRange(false)
     }
   }, [config, fetchRangeData])
+
+  // Auto-fetch when month view changes to a month outside the 30d cache
+  useEffect(() => {
+    if (view !== 'month') return
+    const [yr, mo] = customMonth.split('-').map(Number)
+    const from = new Date(yr, mo - 1, 1).toISOString().slice(0, 10)
+    const to = new Date(yr, mo, 0).toISOString().slice(0, 10)
+    const cacheFrom = daysAgoISO(30)
+    if (from < cacheFrom) {
+      setRangeElec([])
+      setRangeGas([])
+      doFetchRange(from, to)
+    } else {
+      setRangeElec([])
+      setRangeGas([])
+    }
+  }, [view, customMonth, doFetchRange])
+
+  // Auto-fetch when year view changes
+  useEffect(() => {
+    if (view !== 'year') return
+    const from = `${customYear}-01-01`
+    const to = `${customYear}-12-31`
+    const cacheFrom = daysAgoISO(30)
+    if (from < cacheFrom) {
+      setRangeElec([])
+      setRangeGas([])
+      doFetchRange(from, to)
+    } else {
+      setRangeElec([])
+      setRangeGas([])
+    }
+  }, [view, customYear, doFetchRange])
 
   // Day view: validate range then fetch if needed
   function handleDayFromChange(val: string) {
@@ -189,10 +222,23 @@ export function TrendsPage() {
     }
 
     if (view === 'month') {
-      const elecByDay = groupByDay(elecAll.filter(i => i.interval_start.startsWith(customMonth)))
-      const gasByDay = groupByDay(gasAll.filter(i => i.interval_start.startsWith(customMonth)))
-      const outByDay = groupByDay(outAll.filter(i => i.interval_start.startsWith(customMonth)))
+      // Use rangeElec/rangeGas if we fetched for this month, else fall back to elecAll
+      const elecSrc = rangeElec.length ? rangeElec : elecAll
+      const gasSrc = rangeGas.length ? rangeGas : gasAll
+      const elecByDay = groupByDay(elecSrc.filter(i => {
+        const d = new Date(i.interval_start).toLocaleDateString('en-GB', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit' }).split('/').reverse().join('-').slice(0,7)
+        return d === customMonth
+      }))
+      const gasByDay = groupByDay(gasSrc.filter(i => {
+        const d = new Date(i.interval_start).toLocaleDateString('en-GB', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit' }).split('/').reverse().join('-').slice(0,7)
+        return d === customMonth
+      }))
+      const outByDay = groupByDay(outAll.filter(i => {
+        const d = new Date(i.interval_start).toLocaleDateString('en-GB', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit' }).split('/').reverse().join('-').slice(0,7)
+        return d === customMonth
+      }))
       const days = Array.from(new Set([...Object.keys(elecByDay), ...Object.keys(gasByDay), ...Object.keys(outByDay)])).sort()
+      if (!days.length) return []
       return days.map(day => {
         const eIvs = elecByDay[day] ?? []
         const gIvs = gasByDay[day] ?? []
@@ -213,10 +259,13 @@ export function TrendsPage() {
     // Year view
     if (view === 'year') {
       const yearStr = String(customYear)
-      const elecByMonth = groupByMonth(elecAll.filter(i => i.interval_start.startsWith(yearStr)))
-      const gasByMonth = groupByMonth(gasAll.filter(i => i.interval_start.startsWith(yearStr)))
+      const elecSrc = rangeElec.length ? rangeElec : elecAll
+      const gasSrc = rangeGas.length ? rangeGas : gasAll
+      const elecByMonth = groupByMonth(elecSrc.filter(i => i.interval_start.startsWith(yearStr)))
+      const gasByMonth = groupByMonth(gasSrc.filter(i => i.interval_start.startsWith(yearStr)))
       const outByMonth = groupByMonth(outAll.filter(i => i.interval_start.startsWith(yearStr)))
       const months = Array.from(new Set([...Object.keys(elecByMonth), ...Object.keys(gasByMonth), ...Object.keys(outByMonth)])).sort()
+      if (!months.length) return []
       return months.map(mo => {
         const eIvs = elecByMonth[mo] ?? []
         const gIvs = gasByMonth[mo] ?? []
@@ -269,7 +318,7 @@ export function TrendsPage() {
   const viewTabs: { id: View; label: string }[] = [
     { id: 'day',   label: t(lang, 'day') },
     { id: 'month', label: t(lang, 'month') },
-    { id: 'year',  label: t(lang, 'selectYear') },
+    { id: 'year',  label: t(lang, 'year') },
   ]
 
   return (
@@ -340,17 +389,16 @@ export function TrendsPage() {
       {view === 'year' && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '0.75rem' }}>
           <button
-            onClick={() => availableYears.includes(customYear - 1) && setCustomYear(y => y - 1)}
-            disabled={!availableYears.includes(customYear - 1)}
+            onClick={() => setCustomYear(y => y - 1)}
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-muted)', padding: 4 }}
           >
             <ChevronLeft size={18} />
           </button>
           <span style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--color-text)', minWidth: 50, textAlign: 'center' }}>{customYear}</span>
           <button
-            onClick={() => availableYears.includes(customYear + 1) && setCustomYear(y => y + 1)}
-            disabled={!availableYears.includes(customYear + 1)}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-muted)', padding: 4 }}
+            onClick={() => setCustomYear(y => Math.min(y + 1, new Date().getFullYear()))}
+            disabled={customYear >= new Date().getFullYear()}
+            style={{ background: 'none', border: 'none', cursor: customYear >= new Date().getFullYear() ? 'default' : 'pointer', color: customYear >= new Date().getFullYear() ? 'var(--color-border)' : 'var(--color-muted)', padding: 4 }}
           >
             <ChevronRight size={18} />
           </button>

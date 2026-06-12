@@ -26,20 +26,29 @@ export function agileCost(
   intervals: ConsumptionInterval[],
   rates: AgileRate[]
 ): number {
+  // Pre-convert to epoch ms — API may return Z or +00:00; string compare fails
+  const ratesMs = rates.map(r => ({
+    fromMs: new Date(r.valid_from).getTime(),
+    toMs: r.valid_to ? new Date(r.valid_to).getTime() : Infinity,
+    value: r.value_inc_vat,
+  }))
   return intervals.reduce((sum, interval) => {
-    const rate = rates.find(
-      (r) =>
-        r.valid_from <= interval.interval_start &&
-        (!r.valid_to || r.valid_to >= interval.interval_end)
-    )
+    const startMs = new Date(interval.interval_start).getTime()
+    const endMs = new Date(interval.interval_end).getTime()
+    const rate = ratesMs.find(r => r.fromMs <= startMs && r.toMs >= endMs)
     if (!rate) return sum
-    return sum + interval.consumption * rate.value_inc_vat
+    return sum + interval.consumption * rate.value
   }, 0)
 }
 
-// Count unique calendar days represented in a set of intervals
+// Count unique UK calendar days in a set of intervals
+function toUkDate(isoStr: string): string {
+  return new Date(isoStr).toLocaleDateString('en-GB', {
+    timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).split('/').reverse().join('-')
+}
 export function uniqueDaysCount(intervals: ConsumptionInterval[]): number {
-  return new Set(intervals.map(i => i.interval_start.slice(0, 10))).size
+  return new Set(intervals.map(i => toUkDate(i.interval_start))).size
 }
 
 export function calcElecCost(
@@ -90,7 +99,7 @@ export function groupByDay(
 ): Record<string, ConsumptionInterval[]> {
   const groups: Record<string, ConsumptionInterval[]> = {}
   for (const interval of intervals) {
-    const day = interval.interval_start.slice(0, 10)
+    const day = toUkDate(interval.interval_start)
     if (!groups[day]) groups[day] = []
     groups[day].push(interval)
   }
@@ -117,13 +126,13 @@ export function groupByWeek(
   return groups
 }
 
-// Group by month
+// Group by UK local month
 export function groupByMonth(
   intervals: ConsumptionInterval[]
 ): Record<string, ConsumptionInterval[]> {
   const groups: Record<string, ConsumptionInterval[]> = {}
   for (const interval of intervals) {
-    const key = interval.interval_start.slice(0, 7) // YYYY-MM
+    const key = toUkDate(interval.interval_start).slice(0, 7) // YYYY-MM in UK time
     if (!groups[key]) groups[key] = []
     groups[key].push(interval)
   }

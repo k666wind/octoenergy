@@ -19,17 +19,31 @@ import { BudgetCard } from './BudgetCard'
 import { LanguageToggle } from '../shared/LanguageToggle'
 import type { ConsumptionInterval } from '../../types'
 
+// Convert a UTC ISO string to UK local date (handles GMT/BST)
+function utcToUkDate(isoStr: string): string {
+  return new Date(isoStr).toLocaleDateString('en-GB', {
+    timeZone: 'Europe/London',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).split('/').reverse().join('-') // dd/mm/yyyy -> yyyy-mm-dd
+}
+
 function todayStr() {
-  return new Date().toISOString().slice(0, 10)
+  return new Date().toLocaleDateString('en-GB', {
+    timeZone: 'Europe/London',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).split('/').reverse().join('-')
 }
 function yesterdayStr() {
   const d = new Date()
   d.setDate(d.getDate() - 1)
-  return d.toISOString().slice(0, 10)
+  return d.toLocaleDateString('en-GB', {
+    timeZone: 'Europe/London',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).split('/').reverse().join('-')
 }
 
 function getDay(intervals: ConsumptionInterval[], day: string): ConsumptionInterval[] {
-  return intervals.filter(i => i.interval_start.slice(0, 10) === day)
+  return intervals.filter(i => utcToUkDate(i.interval_start) === day)
 }
 
 export function Dashboard() {
@@ -95,11 +109,13 @@ export function Dashboard() {
   const outTodayEarned = tariff ? calcOutgoingEarnings(outToday, exportRate) : 0
   const outYestEarned = tariff ? calcOutgoingEarnings(outYest, exportRate) : 0
 
-  // Month-to-date spending (for budget card)
-  const thisMonthStr = new Date().toISOString().slice(0, 7)
-  const elecMonth = elecAll.filter(i => i.interval_start.startsWith(thisMonthStr))
-  const gasMonth = gasAll.filter(i => i.interval_start.startsWith(thisMonthStr))
-  const outMonth = outgoingAll.filter(i => i.interval_start.startsWith(thisMonthStr))
+  // Month-to-date spending (for budget card) — use UK local month
+  const thisMonthStr = new Date().toLocaleDateString('en-GB', {
+    timeZone: 'Europe/London', year: 'numeric', month: '2-digit',
+  }).split('/').reverse().join('-').slice(0, 7) // yyyy-mm
+  const elecMonth = elecAll.filter(i => utcToUkDate(i.interval_start).startsWith(thisMonthStr))
+  const gasMonth = gasAll.filter(i => utcToUkDate(i.interval_start).startsWith(thisMonthStr))
+  const outMonth = outgoingAll.filter(i => utcToUkDate(i.interval_start).startsWith(thisMonthStr))
   const elecMonthCost = tariff ? calcElecCost(elecMonth, tariff, agileRates, true) : 0
   const gasMonthCost = tariff ? calcGasCost(gasMonth, tariff, true) : 0
   const outMonthEarned = tariff ? calcOutgoingEarnings(outMonth, exportRate) : 0
