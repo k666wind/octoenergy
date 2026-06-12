@@ -365,7 +365,7 @@ export function Dashboard() {
       </div>
 
       {/* Budget tracker */}
-      <BudgetCard spentPence={monthSpentPence} projectedPence={projectedPence} />
+      <BudgetCard spentPence={monthSpentPence} projectedPence={projectedPence} daysElapsed={daysElapsed} />
 
       {/* Last 24h trend charts */}
       {elecAll.length > 0 && (

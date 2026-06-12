@@ -6,9 +6,10 @@ import { t } from '../../lib/i18n'
 interface Props {
   spentPence: number        // total spent so far this month
   projectedPence: number    // projected month-end total
+  daysElapsed: number       // days elapsed in current month (for reliability guard)
 }
 
-export function BudgetCard({ spentPence, projectedPence }: Props) {
+export function BudgetCard({ spentPence, projectedPence, daysElapsed }: Props) {
   const lang = useAppStore(s => s.config?.language ?? 'en')
   const budget = useAppStore(s => s.config?.budget)
   const setBudget = useAppStore(s => s.setBudget)
@@ -21,11 +22,14 @@ export function BudgetCard({ spentPence, projectedPence }: Props) {
   const spentPounds = spentPence / 100
   const projectedPounds = projectedPence / 100
 
+  // Projection is unreliable if fewer than 3 days have elapsed this month
+  const projectionReliable = daysElapsed >= 3
   const pct = limitPence > 0 ? Math.min((spentPence / limitPence) * 100, 100) : 0
   const projectedPct = limitPence > 0 ? Math.min((projectedPence / limitPence) * 100, 100) : 0
 
   const status: 'ok' | 'warning' | 'over' =
     limitPence === 0 ? 'ok'
+    : !projectionReliable ? 'ok'
     : projectedPence > limitPence ? 'over'
     : projectedPence > limitPence * 0.85 ? 'warning'
     : 'ok'
@@ -144,15 +148,27 @@ export function BudgetCard({ spentPence, projectedPence }: Props) {
 
           {/* Projected line */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.72rem', color: 'var(--color-muted)' }}>{t(lang, 'projectedMonthly')}</span>
+            <span style={{ fontSize: '0.72rem', color: 'var(--color-muted)' }}>
+              {t(lang, 'projectedMonthly')}
+              {!projectionReliable && (
+                <span style={{ marginLeft: 4, fontSize: '0.65rem', color: 'var(--color-muted)', fontStyle: 'italic' }}>
+                  ({lang === 'zh' ? '數據不足' : 'insufficient data'})
+                </span>
+              )}
+            </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              {/* Ghost projected bar */}
-              <div style={{ width: 60, height: 4, borderRadius: 2, background: 'var(--color-border)', overflow: 'hidden' }}>
-                <div style={{ height: '100%', borderRadius: 2, background: barColor, opacity: 0.4, width: `${projectedPct}%` }} />
-              </div>
-              <span style={{ fontSize: '0.78rem', fontWeight: 700, color: barColor }}>
-                £{projectedPounds.toFixed(2)}
-              </span>
+              {projectionReliable ? (
+                <>
+                  <div style={{ width: 60, height: 4, borderRadius: 2, background: 'var(--color-border)', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', borderRadius: 2, background: barColor, opacity: 0.4, width: `${projectedPct}%` }} />
+                  </div>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: barColor }}>
+                    £{projectedPounds.toFixed(2)}
+                  </span>
+                </>
+              ) : (
+                <span style={{ fontSize: '0.75rem', color: 'var(--color-muted)', fontStyle: 'italic' }}>—</span>
+              )}
             </div>
           </div>
         </>

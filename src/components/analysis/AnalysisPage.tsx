@@ -11,7 +11,11 @@ import { TimeOfDayChart } from './TimeOfDayChart'
 import { UsageHeatmap } from './UsageHeatmap'
 import { SkeletonCard } from '../shared/SkeletonCard'
 
-export function AnalysisPage() {
+interface AnalysisPageProps {
+  onDayDrillDown?: (date: string) => void
+}
+
+export function AnalysisPage({ onDayDrillDown }: AnalysisPageProps) {
   const lang = useAppStore(s => s.config?.language ?? 'en')
   const config = useAppStore(s => s.config)
   const cache = useAppStore(s => s.cache)
@@ -33,10 +37,16 @@ export function AnalysisPage() {
   const agileRates = cache.agileRates?.data ?? []
 
   // Last 30 days for time-of-day and top-5
+  function toUkDate(isoStr: string): string {
+    return new Date(isoStr).toLocaleDateString('en-GB', {
+      timeZone: 'Europe/London',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+    }).split('/').reverse().join('-')
+  }
   const cutoff = new Date()
   cutoff.setDate(cutoff.getDate() - 30)
-  const cutoffStr = cutoff.toISOString().slice(0, 10)
-  const elec30 = elecAll.filter(i => i.interval_start.slice(0, 10) >= cutoffStr)
+  const cutoffStr = toUkDate(cutoff.toISOString())
+  const elec30 = elecAll.filter(i => toUkDate(i.interval_start) >= cutoffStr)
 
   // Top 5 most expensive days (electricity, last 30d)
   const elecByDay = groupByDay(elec30)
@@ -99,6 +109,7 @@ export function AnalysisPage() {
               hasGas={hasGas}
               hasSolar={hasSolar}
               lang={lang}
+              onDaySelect={onDayDrillDown}
             />
           </div>
 

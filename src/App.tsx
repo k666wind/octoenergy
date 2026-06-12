@@ -13,6 +13,19 @@ type Page = 'dashboard' | 'trends' | 'analysis' | 'tariff' | 'settings'
 export default function App() {
   const isSetupComplete = useAppStore(s => s.isSetupComplete)
   const [page, setPage] = useState<Page>('dashboard')
+  // Drill-down date: when set, TrendsPage opens in Day view for this date
+  const [drillDate, setDrillDate] = useState<string | null>(null)
+
+  function navigateToTrendsDay(date: string) {
+    setDrillDate(date)
+    setPage('trends')
+  }
+
+  function handlePageChange(p: Page) {
+    setPage(p)
+    // Clear drill-down when user navigates manually
+    if (p !== 'trends') setDrillDate(null)
+  }
 
   if (!isSetupComplete) {
     return <SetupWizard />
@@ -21,11 +34,11 @@ export default function App() {
   return (
     <div style={{ minHeight: '100vh', background: 'var(--color-bg)' }}>
       {page === 'dashboard' && <Dashboard />}
-      {page === 'trends'    && <TrendsPage />}
-      {page === 'analysis'  && <AnalysisPage />}
+      {page === 'trends'    && <TrendsPage initialDate={drillDate} onNavigated={() => setDrillDate(null)} />}
+      {page === 'analysis'  && <AnalysisPage onDayDrillDown={navigateToTrendsDay} />}
       {page === 'tariff'    && <TariffPage />}
       {page === 'settings'  && <SettingsPage />}
-      <NavBar current={page} onChange={setPage} />
+      <NavBar current={page} onChange={handlePageChange} />
     </div>
   )
 }

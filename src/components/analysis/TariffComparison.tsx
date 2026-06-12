@@ -70,15 +70,24 @@ export function TariffComparison() {
   const fixedCostPence = elecAll.reduce((sum: number, i: import('../../types').ConsumptionInterval) => sum + i.consumption * tariff.fixed.electricityUnitRate, 0)
   const agileCostPence = agileRates.length > 0 ? agileCost(elecAll, agileRates) : null
 
+  const avgAgileRate = agileRates.length > 0
+    ? (agileRates.reduce((s, r) => s + r.value_inc_vat, 0) / agileRates.length).toFixed(1)
+    : '?'
+
   const scenarios = [
     {
       id: 'current',
       label: t(lang, 'currentTariff'),
-      sublabel: tariff.type === 'fixed' ? `${tariff.fixed.electricityUnitRate}p/kWh` : tariff.type,
+      sublabel: tariff.type === 'fixed'
+        ? `${tariff.fixed.electricityUnitRate}p/kWh`
+        : tariff.type === 'agile'
+        ? `avg ${avgAgileRate}p/kWh`
+        : tariff.type,
       costPence: currentCostPence,
       color: 'var(--color-accent)',
       highlight: true,
     },
+    // Always show fixed as a comparison scenario (unless user is already on fixed)
     ...(tariff.type !== 'fixed' ? [{
       id: 'fixed',
       label: t(lang, 'fixedScenario'),
@@ -87,10 +96,11 @@ export function TariffComparison() {
       color: 'var(--color-elec)',
       highlight: false,
     }] : []),
+    // Show Agile scenario for non-Agile users (when rates loaded)
     ...(agileCostPence !== null && tariff.type !== 'agile' ? [{
       id: 'agile',
       label: t(lang, 'agileScenario'),
-      sublabel: `avg ${agileRates.length > 0 ? (agileRates.reduce((s, r) => s + r.value_inc_vat, 0) / agileRates.length).toFixed(1) : '?'}p/kWh`,
+      sublabel: `avg ${avgAgileRate}p/kWh`,
       costPence: agileCostPence,
       color: 'var(--color-solar)',
       highlight: false,
@@ -179,7 +189,7 @@ export function TariffComparison() {
         )}
       </div>
 
-      {/* Agile fetch controls */}
+      {/* Agile fetch controls — shown for non-Agile users */}
       {tariff.type !== 'agile' && (
         <div className="card">
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: '0.75rem' }}>
@@ -224,6 +234,18 @@ export function TariffComparison() {
             <RefreshCw size={13} style={{ animation: loading ? 'spin 0.7s linear infinite' : 'none' }} />
             {loading ? t(lang, 'fetchingRates') : t(lang, 'agileScenario') + ' — load rates'}
           </button>
+        </div>
+      )}
+
+      {/* For Agile users: explain fixed-rate comparison uses their configured rate */}
+      {tariff.type === 'agile' && tariff.fixed.electricityUnitRate > 0 && (
+        <div className="card" style={{ marginBottom: '0.75rem', fontSize: '0.78rem', color: 'var(--color-muted)' }}>
+          <div style={{ fontWeight: 700, color: 'var(--color-text)', marginBottom: 4 }}>
+            {lang === 'zh' ? '固定費率比較' : 'Fixed Rate Comparison'}
+          </div>
+          {lang === 'zh'
+            ? `以上「固定費率」使用你在設定中配置的 ${tariff.fixed.electricityUnitRate}p/kWh 計算。`
+            : `The Fixed scenario uses the ${tariff.fixed.electricityUnitRate}p/kWh rate configured in your settings.`}
         </div>
       )}
 

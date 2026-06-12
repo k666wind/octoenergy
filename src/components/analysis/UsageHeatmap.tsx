@@ -1,4 +1,11 @@
 import { useState } from 'react'
+
+function toUkDate(isoStr: string): string {
+  return new Date(isoStr).toLocaleDateString('en-GB', {
+    timeZone: 'Europe/London',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).split('/').reverse().join('-')
+}
 import { t } from '../../lib/i18n'
 import { calcElecCost, calcGasCost, penceToPounds } from '../../lib/costCalculator'
 import type { ConsumptionInterval, AgileRate, Language, TariffConfig } from '../../types'
@@ -40,7 +47,7 @@ export function UsageHeatmap({ elecIntervals, gasIntervals, solarIntervals, agil
   // Build 56 day cells (last 8 weeks, Mon-Sun)
   const today = new Date()
   today.setUTCHours(23, 59, 59, 999)
-  const todayStr = today.toISOString().slice(0, 10)
+  const todayStr = toUkDate(today.toISOString())
 
   // Find last Sunday to align grid
   const dayOfWeek = today.getDay() // 0=Sun
@@ -60,10 +67,10 @@ export function UsageHeatmap({ elecIntervals, gasIntervals, solarIntervals, agil
   for (let i = 0; i < 56; i++) {
     const d = new Date(startDate)
     d.setDate(d.getDate() + i)
-    const dateStr = d.toISOString().slice(0, 10)
+    const dateStr = toUkDate(d.toISOString())
 
     const sourceIntervals = mode === 'elec' ? elecIntervals : mode === 'gas' ? gasIntervals : solarIntervals
-    const dayIntervals = sourceIntervals.filter(iv => iv.interval_start.slice(0, 10) === dateStr)
+    const dayIntervals = sourceIntervals.filter(iv => toUkDate(iv.interval_start) === dateStr)
     const kwh = dayIntervals.reduce((s, iv) => s + iv.consumption, 0)
     let costPence = 0
     if (mode === 'elec') costPence = calcElecCost(dayIntervals, tariff, agileRates, true)
@@ -132,10 +139,11 @@ export function UsageHeatmap({ elecIntervals, gasIntervals, solarIntervals, agil
                     aspectRatio: '1',
                     borderRadius: 4,
                     background: bg,
-                    cursor: hasData && !isFuture ? 'pointer' : 'default',
+                    cursor: hasData && !isFuture && onDaySelect ? 'pointer' : 'default',
                     opacity: isFuture ? 0.3 : 1,
                     position: 'relative',
                     transition: 'transform 0.1s',
+                    outline: hasData && !isFuture && onDaySelect ? '1px solid transparent' : undefined,
                   }}
                   title={hasData && !isFuture ? `${cell.date}: ${cell.kwh.toFixed(2)} kWh` : cell.date}
                 />
@@ -159,6 +167,13 @@ export function UsageHeatmap({ elecIntervals, gasIntervals, solarIntervals, agil
           <strong>{tooltip.date}</strong> &nbsp;|&nbsp;
           {tooltip.kwh.toFixed(3)} kWh &nbsp;|&nbsp;
           £{penceToPounds(tooltip.costPence)}
+        </div>
+      )}
+
+      {/* Drill-down hint */}
+      {onDaySelect && (
+        <div style={{ marginTop: '0.5rem', fontSize: '0.68rem', color: 'var(--color-muted)', textAlign: 'right' }}>
+          {lang === 'zh' ? '點擊格子查看當日詳情 →' : 'Tap a cell to view day details →'}
         </div>
       )}
 

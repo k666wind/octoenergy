@@ -37,18 +37,23 @@ function currentYear() {
   return new Date().getFullYear()
 }
 
-export function TrendsPage() {
+interface TrendsPageProps {
+  initialDate?: string | null   // drill-down from Insights heatmap click
+  onNavigated?: () => void      // called once after consuming initialDate
+}
+
+export function TrendsPage({ initialDate, onNavigated }: TrendsPageProps) {
   const lang = useAppStore(s => s.config?.language ?? 'en')
   const cache = useAppStore(s => s.cache)
   const config = useAppStore(s => s.config)
   const { fetchAll, fetchRangeData } = useDataFetch()
 
-  const [view, setView] = useState<View>('day')
+  const [view, setView] = useState<View>(initialDate ? 'day' : 'day')
   const [show, setShow] = useState<'kwh' | 'cost'>('kwh')
 
-  // Day view pickers
-  const [customFrom, setCustomFrom] = useState<string>(daysAgoISO(7))
-  const [customTo, setCustomTo] = useState<string>(todayISO())
+  // Day view pickers — pre-fill with drilled date if provided
+  const [customFrom, setCustomFrom] = useState<string>(initialDate ?? daysAgoISO(7))
+  const [customTo, setCustomTo] = useState<string>(initialDate ?? todayISO())
   const [rangeError, setRangeError] = useState('')
 
   // Month view
@@ -63,6 +68,17 @@ export function TrendsPage() {
   const [isFetchingRange, setIsFetchingRange] = useState(false)
 
   useEffect(() => { fetchAll() }, [fetchAll])
+
+  // Consume drill-down date once
+  useEffect(() => {
+    if (initialDate) {
+      setView('day')
+      setCustomFrom(initialDate)
+      setCustomTo(initialDate)
+      onNavigated?.()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialDate])
 
   const hasGas = !!config?.credentials.gas
   const hasOutgoing = !!config?.credentials.outgoing
