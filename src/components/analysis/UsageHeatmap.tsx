@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 
 function toUkDate(isoStr: string): string {
   return new Date(isoStr).toLocaleDateString('en-GB', {
@@ -31,7 +31,6 @@ interface Props {
 }
 
 function interpolateColor(t: number): string {
-  // t: 0 = low (near card bg), 1 = high (elec amber)
   const r0 = 0x16, g0 = 0x21, b0 = 0x3e
   const r1 = 0xf5, g1 = 0x9e, b1 = 0x0b
   const r = Math.round(r0 + (r1 - r0) * t)
@@ -40,55 +39,90 @@ function interpolateColor(t: number): string {
   return `rgb(${r},${g},${b})`
 }
 
+// Build a Map<isoStr, ukDate> for a set of intervals — O(n) toUkDate calls, done once
+function buildDateCache(intervals: ConsumptionInterval[]): Map<string, string> {
+  const m = new Map<string, string>()
+  for (const iv of intervals) {
+    if (!m.has(iv.interval_start)) {
+      m.set(iv.interval_start, toUkDate(iv.interval_start))
+    }
+  }
+  return m
+}
+
+// Group intervals by UK date using a pre-built cache
+function groupByUkDate(
+  intervals: ConsumptionInterval[],
+  cache: Map<string, string>,
+): Map<string, ConsumptionInterval[]> {
+  const out = new Map<string, ConsumptionInterval[]>()
+  for (const iv of intervals) {
+    const d = cache.get(iv.interval_start) ?? toUkDate(iv.interval_start)
+    const arr = out.get(d)
+    if (arr) arr.push(iv)
+    else out.set(d, [iv])
+  }
+  return out
+}
+
 export function UsageHeatmap({ elecIntervals, gasIntervals, solarIntervals, agileRates, tariff, hasGas, hasSolar, lang, onDaySelect }: Props) {
   const [mode, setMode] = useState<FuelMode>('elec')
   const [tooltip, setTooltip] = useState<{ date: string; kwh: number; costPence: number } | null>(null)
 
-  // Build 56 day cells (last 8 weeks, Mon-Sun)
-  const today = new Date()
-  today.setUTCHours(23, 59, 59, 999)
-  const todayStr = toUkDate(today.toISOString())
+  // Pre-build date caches once per intervals change — O(n) toUkDate, not O(56*n)
+  const elecDateCache = useMemo(() => buildDateCache(elecIntervals), [elecIntervals])
+  const gasDateCache  = useMemo(() => buildDateCache(gasIntervals),  [gasIntervals])
+  const solarDateCache = useMemo(() => buildDateCache(solarIntervals), [solarIntervals])
 
-  // Find last Sunday to align grid
-  const dayOfWeek = today.getDay() // 0=Sun
-  const daysToSunday = dayOfWeek === 0 ? 0 : dayOfWeek
-  const gridEnd = new Date(today)
-  gridEnd.setDate(gridEnd.getDate() - daysToSunday + 6) // end of this week (Saturday... wait let's do Mon-Sun)
+  // Group all intervals by UK date once
+  const elecByDay  = useMemo(() => groupByUkDate(elecIntervals,  elecDateCache),  [elecIntervals,  elecDateCache])
+  const gasByDay   = useMemo(() => groupByUkDate(gasIntervals,   gasDateCache),   [gasIntervals,   gasDateCache])
+  const solarByDay = useMemo(() => groupByUkDate(solarIntervals, solarDateCache), [solarIntervals, solarDateCache])
 
-  // Build Mon-Sun weeks: find the Monday 8 weeks ago
-  const startDate = new Date(today)
-  startDate.setDate(startDate.getDate() - 55) // 56 days = 8 weeks
-  // Shift to Monday
-  const startDow = startDate.getDay()
-  const offsetToMon = startDow === 0 ? -6 : 1 - startDow
-  startDate.setDate(startDate.getDate() + offsetToMon)
+  // Build grid dates once
+  const { todayStr, gridDates } = useMemo(() => {
+    const today = new Date()
+    today.setUTCHours(23, 59, 59, 999)
+    const tStr = toUkDate(today.toISOString())
 
-  const cells: DayCell[] = []
-  for (let i = 0; i < 56; i++) {
-    const d = new Date(startDate)
-    d.setDate(d.getDate() + i)
-    const dateStr = toUkDate(d.toISOString())
+    const startDate = new Date(today)
+    startDate.setDate(startDate.getDate() - 55)
+    const startDow = startDate.getDay()
+    const offsetToMon = startDow === 0 ? -6 : 1 - startDow
+    startDate.setDate(startDate.getDate() + offsetToMon)
 
-    const sourceIntervals = mode === 'elec' ? elecIntervals : mode === 'gas' ? gasIntervals : solarIntervals
-    const dayIntervals = sourceIntervals.filter(iv => toUkDate(iv.interval_start) === dateStr)
-    const kwh = dayIntervals.reduce((s, iv) => s + iv.consumption, 0)
-    let costPence = 0
-    if (mode === 'elec') costPence = calcElecCost(dayIntervals, tariff, agileRates, true)
-    else if (mode === 'gas') costPence = calcGasCost(dayIntervals, tariff, true)
-    else costPence = kwh * (tariff.outgoingFixedRate ?? 0)
+    const dates: string[] = []
+    for (let i = 0; i < 56; i++) {
+      const d = new Date(startDate)
+      d.setDate(d.getDate() + i)
+      dates.push(toUkDate(d.toISOString()))
+    }
+    return { todayStr: tStr, gridDates: dates }
+  }, [])
 
-    cells.push({ date: dateStr, kwh, costPence })
-  }
+  // Build cells — only depends on mode + the relevant pre-grouped map
+  const cells: DayCell[] = useMemo(() => {
+    const byDay = mode === 'elec' ? elecByDay : mode === 'gas' ? gasByDay : solarByDay
+    return gridDates.map(dateStr => {
+      const dayIntervals = byDay.get(dateStr) ?? []
+      const kwh = dayIntervals.reduce((s, iv) => s + iv.consumption, 0)
+      let costPence = 0
+      if (mode === 'elec') costPence = calcElecCost(dayIntervals, tariff, agileRates, true)
+      else if (mode === 'gas') costPence = calcGasCost(dayIntervals, tariff, true)
+      else costPence = kwh * (tariff.outgoingFixedRate ?? 0)
+      return { date: dateStr, kwh, costPence }
+    })
+  }, [mode, elecByDay, gasByDay, solarByDay, gridDates, tariff, agileRates])
 
-  const maxKwh = Math.max(...cells.map(c => c.kwh), 0.001)
+  const maxKwh = useMemo(() => Math.max(...cells.map(c => c.kwh), 0.001), [cells])
 
   const DOW_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
   const weeks: DayCell[][] = []
   for (let w = 0; w < 8; w++) weeks.push(cells.slice(w * 7, w * 7 + 7))
 
   const modeButtons: { id: FuelMode; label: string; show: boolean }[] = [
-    { id: 'elec', label: t(lang, 'heatmapToggleElec'), show: true },
-    { id: 'gas', label: t(lang, 'heatmapToggleGas'), show: hasGas },
+    { id: 'elec',  label: t(lang, 'heatmapToggleElec'),  show: true },
+    { id: 'gas',   label: t(lang, 'heatmapToggleGas'),   show: hasGas },
     { id: 'solar', label: t(lang, 'heatmapToggleSolar'), show: hasSolar },
   ]
 

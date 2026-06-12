@@ -19,22 +19,22 @@ function getPeriod() {
 }
 
 export function useDataFetch() {
-  const {
-    config,
-    isCacheStale,
-    setElectricityData,
-    setGasData,
-    setOutgoingData,
-    setAgileRates,
-    setLoading,
-    setError,
-    touchRefresh,
-  } = useAppStore()
+  const config         = useAppStore(s => s.config)
+  const setElectricityData = useAppStore(s => s.setElectricityData)
+  const setGasData         = useAppStore(s => s.setGasData)
+  const setOutgoingData    = useAppStore(s => s.setOutgoingData)
+  const setAgileRates      = useAppStore(s => s.setAgileRates)
+  const setLoading         = useAppStore(s => s.setLoading)
+  const setError           = useAppStore(s => s.setError)
+  const touchRefresh       = useAppStore(s => s.touchRefresh)
+  // Read isCacheStale via getState() inside the callback — avoids unstable reference
+  // that would cause fetchAll useCallback to regenerate on every store update
+  const storeGetState      = useAppStore.getState
 
   const fetchAll = useCallback(
     async (force = false) => {
       if (!config) return
-      if (!force && !isCacheStale()) return
+      if (!force && !storeGetState().isCacheStale()) return
 
       setLoading(true)
       setError(null)
@@ -92,7 +92,7 @@ export function useDataFetch() {
         setLoading(false)
       }
     },
-    [config, isCacheStale, setElectricityData, setGasData, setOutgoingData, setAgileRates, setLoading, setError, touchRefresh]
+    [config, storeGetState, setElectricityData, setGasData, setOutgoingData, setAgileRates, setLoading, setError, touchRefresh]
   )
 
 

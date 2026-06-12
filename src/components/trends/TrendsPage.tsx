@@ -67,9 +67,13 @@ export function TrendsPage({ initialDate, onNavigated }: TrendsPageProps) {
   const [rangeGas, setRangeGas] = useState<ConsumptionInterval[]>([])
   const [isFetchingRange, setIsFetchingRange] = useState(false)
 
-  useEffect(() => { fetchAll() }, [fetchAll])
+  // Only fetch on mount if not a drill-down navigation (drill-down reuses existing cache)
+  useEffect(() => {
+    if (!initialDate) fetchAll()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-  // Consume drill-down date once
+  // Consume drill-down date once — set view and date range immediately
   useEffect(() => {
     if (initialDate) {
       setView('day')

@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useAppStore } from '../../store/useAppStore'
 import { useDataFetch } from '../../hooks/useDataFetch'
 import { t } from '../../lib/i18n'
@@ -36,26 +36,41 @@ export function AnalysisPage({ onDayDrillDown }: AnalysisPageProps) {
   const solarAll = cache.outgoingConsumption?.data ?? []
   const agileRates = cache.agileRates?.data ?? []
 
-  // Last 30 days for time-of-day and top-5
-  function toUkDate(isoStr: string): string {
-    return new Date(isoStr).toLocaleDateString('en-GB', {
-      timeZone: 'Europe/London',
-      year: 'numeric', month: '2-digit', day: '2-digit',
-    }).split('/').reverse().join('-')
-  }
-  const cutoff = new Date()
-  cutoff.setDate(cutoff.getDate() - 30)
-  const cutoffStr = toUkDate(cutoff.toISOString())
-  const elec30 = elecAll.filter(i => toUkDate(i.interval_start) >= cutoffStr)
+  // Pre-build UK date cache for all elec intervals — O(n) once, not O(n) per render
+  const elecDateCache = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const iv of elecAll) {
+      if (!m.has(iv.interval_start)) {
+        m.set(iv.interval_start, new Date(iv.interval_start).toLocaleDateString('en-GB', {
+          timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit',
+        }).split('/').reverse().join('-'))
+      }
+    }
+    return m
+  }, [elecAll])
 
-  // Top 5 most expensive days (electricity, last 30d)
-  const elecByDay = groupByDay(elec30)
-  const dayEntries = Object.entries(elecByDay).map(([date, ivs]) => ({
-    date,
-    kwh: ivs.reduce((s, i) => s + i.consumption, 0),
-    costPence: calcElecCost(ivs, tariff, agileRates, true),
-  }))
-  const top5 = [...dayEntries].sort((a, b) => b.costPence - a.costPence).slice(0, 5)
+  // Last 30 days filtered using cached dates
+  const elec30 = useMemo(() => {
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - 30)
+    const cutoffStr = new Date(cutoff).toLocaleDateString('en-GB', {
+      timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).split('/').reverse().join('-')
+    return elecAll.filter(i => (elecDateCache.get(i.interval_start) ?? '') >= cutoffStr)
+  }, [elecAll, elecDateCache])
+
+  // Top 5 most expensive days — memoised
+  const top5 = useMemo(() => {
+    const elecByDay = groupByDay(elec30)
+    return Object.entries(elecByDay)
+      .map(([date, ivs]) => ({
+        date,
+        kwh: ivs.reduce((s, i) => s + i.consumption, 0),
+        costPence: calcElecCost(ivs, tariff, agileRates, true),
+      }))
+      .sort((a, b) => b.costPence - a.costPence)
+      .slice(0, 5)
+  }, [elec30, tariff, agileRates])
 
   const hasData = elecAll.length > 0
 

@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { t } from '../../lib/i18n'
 import type { ConsumptionInterval, AgileRate, Language } from '../../types'
@@ -26,39 +27,47 @@ const BANDS = [
 const BAND_COLORS = ['#818cf8', '#34d399', '#f59e0b', '#e040fb']
 
 export function TimeOfDayChart({ intervals, agileRates, isAgile, lang }: Props) {
-  // Group intervals by day, then by band within each day
-  const dayMap: Record<string, ConsumptionInterval[]> = {}
-  for (const iv of intervals) {
-    const day = iv.interval_start.slice(0, 10)
-    if (!dayMap[day]) dayMap[day] = []
-    dayMap[day].push(iv)
-  }
-  const days = Object.keys(dayMap)
-  if (!days.length) return null
+  // Pre-compute hour for each interval once — avoids repeated new Date() in nested loops
+  const intervalsWithHour = useMemo(() =>
+    intervals.map(iv => ({ iv, hour: new Date(iv.interval_start).getUTCHours() })),
+    [intervals]
+  )
 
-  const data: BandData[] = BANDS.map((band, bi) => {
-    const bandIntervalsByDay: ConsumptionInterval[][] = days.map(day =>
-      dayMap[day].filter(iv => {
-        const hour = new Date(iv.interval_start).getUTCHours()
-        return hour >= band.start && hour < band.end
-      })
-    )
-
-    const totalKwhPerDay = bandIntervalsByDay.map(ivs => ivs.reduce((s, i) => s + i.consumption, 0))
-    const avgKwh = totalKwhPerDay.reduce((s, v) => s + v, 0) / days.length
-
-    let avgRate: number | undefined
-    if (isAgile && agileRates.length) {
-      const allBandIntervals = bandIntervalsByDay.flat()
-      if (allBandIntervals.length) {
-        const totalCost = agileCost(allBandIntervals, agileRates)
-        const totalKwh = allBandIntervals.reduce((s, i) => s + i.consumption, 0)
-        avgRate = totalKwh > 0 ? totalCost / totalKwh : 0
-      }
+  // Group by day, then compute band data — all memoised
+  const { days, data } = useMemo(() => {
+    const dayMap: Record<string, { iv: ConsumptionInterval; hour: number }[]> = {}
+    for (const item of intervalsWithHour) {
+      const day = item.iv.interval_start.slice(0, 10)
+      if (!dayMap[day]) dayMap[day] = []
+      dayMap[day].push(item)
     }
+    const days = Object.keys(dayMap)
 
-    return { band: t(lang, band.label as Parameters<typeof t>[1]), avgKwh, avgRate, _bi: bi }
-  }).map(({ _bi: _, ...rest }) => rest) as BandData[]
+    const data: BandData[] = BANDS.map(band => {
+      const bandIntervalsByDay: ConsumptionInterval[][] = days.map(day =>
+        dayMap[day]
+          .filter(item => item.hour >= band.start && item.hour < band.end)
+          .map(item => item.iv)
+      )
+      const totalKwhPerDay = bandIntervalsByDay.map(ivs => ivs.reduce((s, i) => s + i.consumption, 0))
+      const avgKwh = days.length > 0 ? totalKwhPerDay.reduce((s, v) => s + v, 0) / days.length : 0
+
+      let avgRate: number | undefined
+      if (isAgile && agileRates.length) {
+        const allBandIntervals = bandIntervalsByDay.flat()
+        if (allBandIntervals.length) {
+          const totalCost = agileCost(allBandIntervals, agileRates)
+          const totalKwh = allBandIntervals.reduce((s, i) => s + i.consumption, 0)
+          avgRate = totalKwh > 0 ? totalCost / totalKwh : 0
+        }
+      }
+      return { band: t(lang, band.label as Parameters<typeof t>[1]), avgKwh, avgRate }
+    })
+
+    return { days, data }
+  }, [intervalsWithHour, isAgile, agileRates, lang])
+
+  if (!days.length) return null
 
   return (
     <div>
