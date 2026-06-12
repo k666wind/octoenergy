@@ -214,6 +214,10 @@ const translations = {
 
     // Phase 4 — Auto-detect chip
     autoDetected: 'Auto-detected from your account',
+    // Phase 5 — Dashboard fallback
+    dataAsOf: 'Data as of',
+    usingPreviousDay: 'Using previous day (no data yet for today)',
+    dataDelayed: 'Data delayed — showing most recent available',
   },
   zh: {
     // Nav
@@ -428,6 +432,10 @@ const translations = {
 
     // Phase 4 — Auto-detect chip
     autoDetected: '已自動從帳戶偵測',
+    // Phase 5 — Dashboard fallback
+    dataAsOf: '數據截至',
+    usingPreviousDay: '使用前一日數據（今日數據未就緒）',
+    dataDelayed: '數據延遲 — 顯示最近可用數據',
   },
 } as const
 

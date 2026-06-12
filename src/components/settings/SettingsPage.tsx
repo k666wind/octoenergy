@@ -330,7 +330,7 @@ export function SettingsPage() {
 
       {/* Version */}
       <div style={{ textAlign: 'center', marginTop: '2rem', color: 'var(--color-muted)', fontSize: '0.72rem' }}>
-        OctoEnergy v2.0.0
+        OctoEnergy v5.0.0
       </div>
     </div>
   )

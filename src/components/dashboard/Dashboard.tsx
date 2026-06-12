@@ -42,8 +42,35 @@ function yesterdayStr() {
   }).split('/').reverse().join('-')
 }
 
+// Minimum half-hour slots to treat a day as "has real data"
+const MIN_INTERVALS = 4
+
 function getDay(intervals: ConsumptionInterval[], day: string): ConsumptionInterval[] {
   return intervals.filter(i => utcToUkDate(i.interval_start) === day)
+}
+
+// Find the most recent date that has at least MIN_INTERVALS slots of data.
+// Returns { date: string, isFallback: boolean }
+function bestAvailableDay(
+  intervals: ConsumptionInterval[],
+  preferredDay: string,
+): { date: string; isFallback: boolean } {
+  const onPreferred = intervals.filter(i => utcToUkDate(i.interval_start) === preferredDay)
+  if (onPreferred.length >= MIN_INTERVALS) return { date: preferredDay, isFallback: false }
+
+  // Collect all unique dates in descending order
+  const uniqueDates = Array.from(new Set(intervals.map(i => utcToUkDate(i.interval_start))))
+    .filter(d => d < preferredDay) // only past dates
+    .sort()
+    .reverse()
+
+  for (const d of uniqueDates) {
+    const count = intervals.filter(i => utcToUkDate(i.interval_start) === d).length
+    if (count >= MIN_INTERVALS) return { date: d, isFallback: true }
+  }
+
+  // Nothing useful found — return preferred day anyway (will show 0)
+  return { date: preferredDay, isFallback: false }
 }
 
 export function Dashboard() {
@@ -87,12 +114,19 @@ export function Dashboard() {
   const today = todayStr()
   const yesterday = yesterdayStr()
 
-  const elecToday = getDay(elecAll, today)
-  const elecYest = getDay(elecAll, yesterday)
-  const gasToday = getDay(gasAll, today)
-  const gasYest = getDay(gasAll, yesterday)
-  const outToday = getDay(outgoingAll, today)
-  const outYest = getDay(outgoingAll, yesterday)
+  // Use fallback day if today has < MIN_INTERVALS data points (e.g. early morning or 1-day API delay)
+  const { date: elecDisplayDay, isFallback: elecIsFallback } = bestAvailableDay(elecAll, today)
+  const { date: gasDisplayDay, isFallback: gasIsFallback } = bestAvailableDay(gasAll, today)
+  const { date: outDisplayDay, isFallback: outIsFallback } = bestAvailableDay(outgoingAll, today)
+  const isFallback = elecIsFallback || gasIsFallback || (hasOutgoing && outIsFallback)
+  const fallbackDate = elecIsFallback ? elecDisplayDay : gasIsFallback ? gasDisplayDay : today
+
+  const elecToday = getDay(elecAll, elecDisplayDay)
+  const elecYest = getDay(elecAll, elecDisplayDay === yesterday ? today : yesterday)
+  const gasToday = getDay(gasAll, gasDisplayDay)
+  const gasYest = getDay(gasAll, gasDisplayDay === yesterday ? today : yesterday)
+  const outToday = getDay(outgoingAll, outDisplayDay)
+  const outYest = getDay(outgoingAll, outDisplayDay === yesterday ? today : yesterday)
 
   const elecTodayKwh = totalKwh(elecToday)
   const elecYestKwh = totalKwh(elecYest)
@@ -209,6 +243,25 @@ export function Dashboard() {
         </div>
       )}
 
+      {/* Fallback data banner */}
+      {isFallback && !isLoading && elecAll.length > 0 && (
+        <div style={{
+          background: 'rgba(245,158,11,0.1)',
+          border: '1px solid rgba(245,158,11,0.4)',
+          borderRadius: 8,
+          padding: '0.55rem 0.9rem',
+          marginBottom: '0.75rem',
+          fontSize: '0.78rem',
+          color: '#f59e0b',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+        }}>
+          <span>&#9203;</span>
+          <span>{t(lang, 'dataDelayed')} &mdash; {t(lang, 'dataAsOf')} {fallbackDate}</span>
+        </div>
+      )}
+
       {/* Usage cards */}
       <div style={{ display: 'grid', gridTemplateColumns: gridCols, gap: '0.75rem', marginBottom: '1rem' }}>
         <UsageCard
@@ -295,7 +348,9 @@ export function Dashboard() {
           </>
         ) : (
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ color: 'var(--color-muted)', fontSize: '0.82rem' }}>{t(lang, 'totalToday')}</span>
+            <span style={{ color: 'var(--color-muted)', fontSize: '0.82rem' }}>
+                {isFallback ? `${t(lang, 'dataAsOf')} ${fallbackDate}` : t(lang, 'totalToday')}
+              </span>
             <span style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--color-accent)' }}>
               £{penceToPounds(totalImportCost)}
             </span>
@@ -343,6 +398,11 @@ export function Dashboard() {
         <div className="card">
           <h3 style={{ margin: '0 0 1rem', fontSize: '0.9rem', color: 'var(--color-muted)' }}>
             {t(lang, 'halfHourly')} — &#9889;
+            {isFallback && (
+              <span style={{ marginLeft: 8, fontSize: '0.72rem', color: '#f59e0b' }}>
+                ({elecDisplayDay})
+              </span>
+            )}
           </h3>
           <HeatmapChart intervals={elecToday} accentColor="var(--color-elec)" />
         </div>
