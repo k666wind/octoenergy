@@ -1,4 +1,5 @@
 import { useAppStore } from '../../store/useAppStore'
+import { AgileRateTrendChart } from './AgileRateTrendChart'
 import { t } from '../../lib/i18n'
 import { Zap, Flame, Sun } from 'lucide-react'
 
@@ -98,6 +99,9 @@ export function TariffPage() {
               </div>
             </div>
           )}
+
+          {/* 7-day rate trend chart */}
+          <AgileRateTrendChart agileRates={agileRates} lang={lang} />
 
           {/* Half-hourly rate list */}
           <div className="card">

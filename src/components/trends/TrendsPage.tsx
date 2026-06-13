@@ -310,8 +310,19 @@ export function TrendsPage({ initialDate, onNavigated }: TrendsPageProps) {
 
   function handleExportCsv() {
     if (!tariff) return
-    const date = new Date().toISOString().slice(0, 10)
-    exportTrendsCsv(elecAll, gasAll, tariff, agileRates, `octoenergy-${date}.csv`)
+    // Export only the intervals in the currently displayed range
+    const activeElec = view === 'day'
+      ? (rangeElec.length > 0 ? rangeElec : elecAll).filter(i => i.interval_start.slice(0, 10) >= customFrom && i.interval_start.slice(0, 10) <= customTo)
+      : view === 'month'
+      ? (rangeElec.length > 0 ? rangeElec : elecAll).filter(i => i.interval_start.slice(0, 7) === customMonth)
+      : (rangeElec.length > 0 ? rangeElec : elecAll).filter(i => i.interval_start.slice(0, 4) === String(customYear))
+    const activeGas = view === 'day'
+      ? (rangeGas.length > 0 ? rangeGas : gasAll).filter(i => i.interval_start.slice(0, 10) >= customFrom && i.interval_start.slice(0, 10) <= customTo)
+      : view === 'month'
+      ? (rangeGas.length > 0 ? rangeGas : gasAll).filter(i => i.interval_start.slice(0, 7) === customMonth)
+      : (rangeGas.length > 0 ? rangeGas : gasAll).filter(i => i.interval_start.slice(0, 4) === String(customYear))
+    const label = view === 'day' ? `${customFrom}_${customTo}` : view === 'month' ? customMonth : String(customYear)
+    exportTrendsCsv(activeElec, activeGas, tariff, agileRates, `octoenergy-${label}.csv`)
   }
 
   const totalElecKwh = chartData.reduce((s, d) => s + d.elecKwh, 0)
@@ -482,7 +493,7 @@ export function TrendsPage({ initialDate, onNavigated }: TrendsPageProps) {
           <StatCard
             label={t(lang, 'electricity')}
             value={`${totalElecKwh.toFixed(1)} kWh`}
-            sub={`£${totalElecCost.toFixed(2)}`}
+            sub={`£${totalElecCost.toFixed(2)} (${t(lang, 'exclStanding')})`}
             extra={view === 'day' && chartData.length > 1 ? `${t(lang, 'dailyAverage')}: ${(totalElecKwh / chartData.length).toFixed(2)} kWh` : undefined}
             color="var(--color-elec)"
           />
@@ -490,7 +501,7 @@ export function TrendsPage({ initialDate, onNavigated }: TrendsPageProps) {
             <StatCard
               label={t(lang, 'gas')}
               value={`${totalGasKwh.toFixed(1)} kWh`}
-              sub={`£${totalGasCost.toFixed(2)}`}
+              sub={`£${totalGasCost.toFixed(2)} (${t(lang, 'exclStanding')})`}
               color="var(--color-gas)"
             />
           )}

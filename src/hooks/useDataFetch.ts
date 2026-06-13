@@ -18,6 +18,20 @@ function getPeriod() {
   }
 }
 
+// Exponential backoff retry — max 3 attempts: 1s, 2s, 4s
+async function withRetry<T>(fn: () => Promise<T>, maxAttempts = 3): Promise<T> {
+  let attempt = 0
+  while (true) {
+    try {
+      return await fn()
+    } catch (err) {
+      attempt++
+      if (attempt >= maxAttempts) throw err
+      await new Promise(res => setTimeout(res, Math.pow(2, attempt - 1) * 1000))
+    }
+  }
+}
+
 export function useDataFetch() {
   const config         = useAppStore(s => s.config)
   const setElectricityData = useAppStore(s => s.setElectricityData)
@@ -43,45 +57,45 @@ export function useDataFetch() {
 
       try {
         // Fetch electricity (always)
-        const elec = await fetchElectricityConsumption(
+        const elec = await withRetry(() => fetchElectricityConsumption(
           config.credentials,
           periodFrom,
           periodTo,
           'halfhour'
-        )
+        ))
         setElectricityData(elec)
 
         // Fetch gas (only if configured)
         if (config.credentials.gas) {
-          const gas = await fetchGasConsumption(
+          const gas = await withRetry(() => fetchGasConsumption(
             config.credentials,
             periodFrom,
             periodTo,
             'halfhour'
-          )
+          ))
           setGasData(gas)
         }
 
         // Fetch outgoing/solar (only if configured)
         if (config.credentials.outgoing) {
-          const outgoing = await fetchOutgoingConsumption(
+          const outgoing = await withRetry(() => fetchOutgoingConsumption(
             config.credentials,
             periodFrom,
             periodTo,
             'halfhour'
-          )
+          ))
           setOutgoingData(outgoing)
         }
 
         // Fetch Agile rates if on Agile tariff
         if (config.tariff.type === 'agile' && config.tariff.agileProductCode) {
           const region = config.tariff.dnoRegion ?? 'C'
-          const rates = await fetchAgileRates(
-            config.tariff.agileProductCode,
+          const rates = await withRetry(() => fetchAgileRates(
+            config.tariff.agileProductCode!,
             periodFrom,
             periodTo,
             region
-          )
+          ))
           setAgileRates(rates)
         }
 

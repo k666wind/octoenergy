@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useAppStore } from '../../store/useAppStore'
 import { useDataFetch } from '../../hooks/useDataFetch'
 import { t } from '../../lib/i18n'
@@ -31,6 +31,16 @@ export function AnalysisPage({ onDayDrillDown }: AnalysisPageProps) {
   const hasSolar = !!credentials.outgoing
   const isAgile = tariff.type === 'agile'
 
+  // Date range selector (default: last 30 days)
+  function defaultFrom() {
+    const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().slice(0, 10)
+  }
+  function defaultTo() { return new Date().toISOString().slice(0, 10) }
+  const [rangeFrom, setRangeFrom] = useState(defaultFrom)
+  const [rangeTo,   setRangeTo]   = useState(defaultTo)
+  const [appliedFrom, setAppliedFrom] = useState(rangeFrom)
+  const [appliedTo,   setAppliedTo]   = useState(rangeTo)
+
   const elecAll = cache.electricityConsumption?.data ?? []
   const gasAll = cache.gasConsumption?.data ?? []
   const solarAll = cache.outgoingConsumption?.data ?? []
@@ -49,15 +59,13 @@ export function AnalysisPage({ onDayDrillDown }: AnalysisPageProps) {
     return m
   }, [elecAll])
 
-  // Last 30 days filtered using cached dates
+  // Filter by selected date range
   const elec30 = useMemo(() => {
-    const cutoff = new Date()
-    cutoff.setDate(cutoff.getDate() - 30)
-    const cutoffStr = new Date(cutoff).toLocaleDateString('en-GB', {
-      timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit',
-    }).split('/').reverse().join('-')
-    return elecAll.filter(i => (elecDateCache.get(i.interval_start) ?? '') >= cutoffStr)
-  }, [elecAll, elecDateCache])
+    return elecAll.filter(i => {
+      const d = elecDateCache.get(i.interval_start) ?? ''
+      return d >= appliedFrom && d <= appliedTo
+    })
+  }, [elecAll, elecDateCache, appliedFrom, appliedTo])
 
   // Top 5 most expensive days — memoised
   const top5 = useMemo(() => {
@@ -97,6 +105,40 @@ export function AnalysisPage({ onDayDrillDown }: AnalysisPageProps) {
 
       {hasData && (
         <>
+          {/* Date range picker */}
+          <div className="card" style={{ marginBottom: '1rem', display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: '0.75rem' }}>
+            <div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--color-muted)', marginBottom: 4 }}>{t(lang, 'analysisFrom')}</div>
+              <input
+                type="date"
+                className="input-field"
+                value={rangeFrom}
+                max={rangeTo}
+                onChange={e => setRangeFrom(e.target.value)}
+                style={{ fontSize: '0.82rem', width: 140 }}
+              />
+            </div>
+            <div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--color-muted)', marginBottom: 4 }}>{t(lang, 'analysisTo')}</div>
+              <input
+                type="date"
+                className="input-field"
+                value={rangeTo}
+                min={rangeFrom}
+                max={defaultTo()}
+                onChange={e => setRangeTo(e.target.value)}
+                style={{ fontSize: '0.82rem', width: 140 }}
+              />
+            </div>
+            <button
+              className="btn-secondary"
+              onClick={() => { setAppliedFrom(rangeFrom); setAppliedTo(rangeTo) }}
+              style={{ fontSize: '0.82rem', padding: '6px 16px' }}
+            >
+              {t(lang, 'analysisApply')}
+            </button>
+          </div>
+
           {/* Section A: Time of day */}
           <div className="card" style={{ marginBottom: '1rem' }}>
             <h2 style={{ margin: '0 0 1rem', fontSize: '0.95rem', fontWeight: 700, color: 'var(--color-text)' }}>
@@ -133,6 +175,7 @@ export function AnalysisPage({ onDayDrillDown }: AnalysisPageProps) {
             <div className="card">
               <h2 style={{ margin: '0 0 1rem', fontSize: '0.95rem', fontWeight: 700, color: 'var(--color-text)' }}>
                 {t(lang, 'topExpensiveDays')}
+                <span style={{ fontSize: '0.65rem', color: 'var(--color-muted)', fontWeight: 400, marginLeft: 6 }}>({t(lang, 'inclStanding')})</span>
               </h2>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {top5.map((day, i) => (

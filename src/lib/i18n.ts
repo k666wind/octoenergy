@@ -218,6 +218,21 @@ const translations = {
     dataAsOf: 'Data as of',
     usingPreviousDay: 'Using previous day (no data yet for today)',
     dataDelayed: 'Data delayed — showing most recent available',
+    // Phase 6
+    agileRateTrend: 'Rate Trend (7 days)',
+    rateTrendAvg: 'Avg',
+    rateTrendPeak: 'Peak',
+    rateTrendOff: 'Off-peak',
+    csvExportRange: 'Export selected range',
+    analysisFrom: 'From',
+    analysisTo: 'To',
+    analysisApply: 'Apply',
+    retrying: 'Retrying…',
+    retryFailed: 'Failed after retries. ',
+    retryNow: 'Try again',
+    vsYestLabel: 'vs prev day',
+    inclStanding: 'incl. standing charge',
+    exclStanding: 'excl. standing charge',
   },
   zh: {
     // Nav
@@ -436,6 +451,21 @@ const translations = {
     dataAsOf: '數據截至',
     usingPreviousDay: '使用前一日數據（今日數據未就緒）',
     dataDelayed: '數據延遲 — 顯示最近可用數據',
+    // Phase 6
+    agileRateTrend: '費率趨勢（7日）',
+    rateTrendAvg: '平均',
+    rateTrendPeak: '高峰',
+    rateTrendOff: '非高峰',
+    csvExportRange: '匯出所選範圍',
+    analysisFrom: '由',
+    analysisTo: '至',
+    analysisApply: '套用',
+    retrying: '重試中…',
+    retryFailed: '重試後仍失敗。',
+    retryNow: '再試',
+    vsYestLabel: 'vs 前一日',
+    inclStanding: '包含基本日費',
+    exclStanding: '不包含基本日費',
   },
 } as const
 

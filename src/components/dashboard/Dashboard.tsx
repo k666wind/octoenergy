@@ -33,14 +33,7 @@ function todayStr() {
     year: 'numeric', month: '2-digit', day: '2-digit',
   }).split('/').reverse().join('-')
 }
-function yesterdayStr() {
-  const d = new Date()
-  d.setDate(d.getDate() - 1)
-  return d.toLocaleDateString('en-GB', {
-    timeZone: 'Europe/London',
-    year: 'numeric', month: '2-digit', day: '2-digit',
-  }).split('/').reverse().join('-')
-}
+
 
 // Minimum half-hour slots to treat a day as "has real data"
 const MIN_INTERVALS = 4
@@ -112,7 +105,6 @@ export function Dashboard() {
   const tariff = config?.tariff
 
   const today = todayStr()
-  const yesterday = yesterdayStr()
 
   // Use fallback day if today has < MIN_INTERVALS data points (e.g. early morning or 1-day API delay)
   const { date: elecDisplayDay, isFallback: elecIsFallback } = bestAvailableDay(elecAll, today)
@@ -121,12 +113,22 @@ export function Dashboard() {
   const isFallback = elecIsFallback || gasIsFallback || (hasOutgoing && outIsFallback)
   const fallbackDate = elecIsFallback ? elecDisplayDay : gasIsFallback ? gasDisplayDay : today
 
+  // "Previous day" = the day before whichever display day we're using (handles multi-day fallback)
+  // IMPORTANT: parse yyyy-mm-dd by splitting parts — new Date("yyyy-mm-dd") is midnight UTC
+  // which in BST (UTC+1) = 11pm the day before, causing utcToUkDate to return wrong date.
+  function prevDay(dateStr: string): string {
+    const [y, m, d] = dateStr.split('-').map(Number)
+    const dt = new Date(y, m - 1, d) // local midnight — no UTC offset issue
+    dt.setDate(dt.getDate() - 1)
+    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
+  }
+
   const elecToday = getDay(elecAll, elecDisplayDay)
-  const elecYest = getDay(elecAll, elecDisplayDay === yesterday ? today : yesterday)
-  const gasToday = getDay(gasAll, gasDisplayDay)
-  const gasYest = getDay(gasAll, gasDisplayDay === yesterday ? today : yesterday)
-  const outToday = getDay(outgoingAll, outDisplayDay)
-  const outYest = getDay(outgoingAll, outDisplayDay === yesterday ? today : yesterday)
+  const elecYest  = getDay(elecAll, prevDay(elecDisplayDay))
+  const gasToday  = getDay(gasAll, gasDisplayDay)
+  const gasYest   = getDay(gasAll, prevDay(gasDisplayDay))
+  const outToday  = getDay(outgoingAll, outDisplayDay)
+  const outYest   = getDay(outgoingAll, prevDay(outDisplayDay))
 
   const elecTodayKwh = totalKwh(elecToday)
   const elecYestKwh = totalKwh(elecYest)
@@ -238,8 +240,14 @@ export function Dashboard() {
         </div>
       )}
       {error && (
-        <div style={{ background: 'rgba(248,113,113,0.1)', border: '1px solid var(--color-danger)', borderRadius: 8, padding: '0.75rem', marginBottom: '1rem', color: 'var(--color-danger)', fontSize: '0.85rem' }}>
-          {t(lang, 'errorFetch')}
+        <div style={{ background: 'rgba(248,113,113,0.1)', border: '1px solid var(--color-danger)', borderRadius: 8, padding: '0.75rem', marginBottom: '1rem', color: 'var(--color-danger)', fontSize: '0.85rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+          <span>{t(lang, 'retryFailed')}</span>
+          <button
+            onClick={() => fetchAll(true)}
+            style={{ background: 'var(--color-danger)', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: '0.78rem', cursor: 'pointer', flexShrink: 0 }}
+          >
+            {t(lang, 'retryNow')}
+          </button>
         </div>
       )}
 
@@ -274,6 +282,8 @@ export function Dashboard() {
           lang={lang}
           unit="kWh"
           costLabel={t(lang, 'cost')}
+          standingNote={t(lang, 'inclStanding')}
+          isFallback={isFallback}
         />
         {hasGas && (
           <UsageCard
@@ -286,6 +296,8 @@ export function Dashboard() {
             lang={lang}
             unit="kWh"
             costLabel={t(lang, 'cost')}
+            standingNote={t(lang, 'inclStanding')}
+            isFallback={isFallback}
           />
         )}
         {hasOutgoing && (
@@ -300,6 +312,7 @@ export function Dashboard() {
             unit="kWh"
             costLabel={t(lang, 'earned')}
             isEarning
+            isFallback={isFallback}
           />
         )}
       </div>
@@ -332,7 +345,7 @@ export function Dashboard() {
           <>
             <div style={{ fontSize: '0.78rem', color: 'var(--color-muted)', marginBottom: '0.5rem' }}>{t(lang, 'totalToday')}</div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
-              <span style={{ fontSize: '0.82rem', color: 'var(--color-muted)' }}>{t(lang, 'electricityCost')}</span>
+              <span style={{ fontSize: '0.82rem', color: 'var(--color-muted)' }}>{t(lang, 'electricityCost')} <span style={{ fontSize: '0.68rem', opacity: 0.65 }}>({t(lang, 'inclStanding')})</span></span>
               <span style={{ fontSize: '0.9rem', color: 'var(--color-text)' }}>£{penceToPounds(totalImportCost)}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
@@ -418,14 +431,16 @@ interface UsageCardProps {
   accentColor: string
   todayKwh: number
   yesterdayKwh: number
+  isFallback?: boolean
   todayCostPence: number
   lang: 'en' | 'zh'
   unit: string
   costLabel: string
+  standingNote?: string
   isEarning?: boolean
 }
 
-function UsageCard({ icon, label, accentColor, todayKwh, yesterdayKwh, todayCostPence, lang, unit, costLabel, isEarning }: UsageCardProps) {
+function UsageCard({ icon, label, accentColor, todayKwh, yesterdayKwh, todayCostPence, lang, unit, costLabel, standingNote, isEarning, isFallback }: UsageCardProps) {
   const pctChange = yesterdayKwh > 0 ? ((todayKwh - yesterdayKwh) / yesterdayKwh) * 100 : 0
   // For solar export, more = better (green), so invert the colour logic
   const up = pctChange >= 0
@@ -444,9 +459,14 @@ function UsageCard({ icon, label, accentColor, todayKwh, yesterdayKwh, todayCost
       <div style={{ fontSize: '0.78rem', color: 'var(--color-muted)', marginTop: 2 }}>
         £{penceToPounds(todayCostPence)} {costLabel}
       </div>
+      {standingNote && (
+        <div style={{ fontSize: '0.65rem', color: 'var(--color-muted)', marginTop: 1, opacity: 0.7 }}>
+          {standingNote}
+        </div>
+      )}
       {yesterdayKwh > 0 && (
         <div style={{ marginTop: '0.5rem', fontSize: '0.72rem', color: isPositive ? 'var(--color-success)' : 'var(--color-danger)' }}>
-          {up ? '▲' : '▼'} {Math.abs(pctChange).toFixed(1)}% vs {t(lang, 'yesterday')}
+          {up ? '▲' : '▼'} {Math.abs(pctChange).toFixed(1)}% vs {t(lang, isFallback ? 'vsYestLabel' : 'yesterday')}
         </div>
       )}
     </div>

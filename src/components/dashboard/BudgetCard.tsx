@@ -135,6 +135,7 @@ export function BudgetCard({ spentPence, projectedPence, daysElapsed }: Props) {
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
             <span style={{ fontSize: '0.78rem', color: 'var(--color-muted)' }}>
               £{spentPounds.toFixed(2)} {t(lang, 'budgetUsed')}
+              <span style={{ fontSize: '0.62rem', opacity: 0.6, marginLeft: 3 }}>({t(lang, 'inclStanding')})</span>
             </span>
             <span style={{ fontSize: '0.78rem', color: 'var(--color-muted)' }}>
               {t(lang, 'budgetOf')} £{limitPounds.toFixed(0)}
