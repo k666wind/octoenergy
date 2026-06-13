@@ -80,3 +80,42 @@ body {
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: var(--color-bg); }
 ::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 3px; }
+
+/* ── Print / PDF export styles ─────────────────────────────────── */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+    font-size: 11pt;
+  }
+
+  /* Hide nav, buttons, interactive controls */
+  nav, .nav-bar, button, input, select,
+  [class*="NavBar"], [class*="nav"] {
+    display: none !important;
+  }
+
+  /* Remove card shadows and dark backgrounds */
+  .card {
+    background: white !important;
+    border: 1px solid #ccc !important;
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
+
+  /* Ensure charts are visible */
+  .recharts-wrapper,
+  .recharts-surface {
+    overflow: visible !important;
+  }
+
+  /* Page breaks */
+  h1, h2 {
+    break-after: avoid;
+  }
+
+  /* Remove bottom padding for nav */
+  [style*="5rem"] {
+    padding-bottom: 1rem !important;
+  }
+}

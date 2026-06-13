@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAppStore } from './store/useAppStore'
 import { SetupWizard } from './components/setup/SetupWizard'
 import { Dashboard } from './components/dashboard/Dashboard'
@@ -13,6 +13,26 @@ type Page = 'dashboard' | 'trends' | 'analysis' | 'tariff' | 'settings'
 export default function App() {
   const isSetupComplete = useAppStore(s => s.isSetupComplete)
   const [page, setPage] = useState<Page>('dashboard')
+  const config = useAppStore(s => s.config)
+
+  // Post Agile alert config to service worker whenever it changes
+  useEffect(() => {
+    const cfg = config?.agileAlert
+    if (!cfg || config?.tariff?.type !== 'agile') return
+    navigator.serviceWorker?.ready.then(reg => {
+      reg.active?.postMessage({
+        type: 'AGILE_ALERT_CONFIG',
+        payload: {
+          enabled: cfg.enabled,
+          thresholdPence: cfg.thresholdPence,
+          apiKey: config?.credentials.apiKey ?? '',
+          dnoRegion: config?.tariff?.dnoRegion ?? 'C',
+          productCode: config?.tariff?.agileProductCode ?? 'AGILE-24-10-01',
+        },
+      })
+    })
+  }, [config?.agileAlert, config?.tariff?.type, config?.tariff?.dnoRegion, config?.tariff?.agileProductCode, config?.credentials.apiKey])
+
   // Drill-down date: when set, TrendsPage opens in Day view for this date
   const [drillDate, setDrillDate] = useState<string | null>(null)
 

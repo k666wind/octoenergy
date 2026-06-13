@@ -15,6 +15,7 @@ interface Props {
   agileRates: AgileRate[]
   isAgile: boolean
   lang: Language
+  fuel?: 'elec' | 'gas'
 }
 
 const BANDS = [
@@ -24,9 +25,10 @@ const BANDS = [
   { key: 'evening',   label: 'bandEvening',   start: 18, end: 24 },
 ] as const
 
-const BAND_COLORS = ['#818cf8', '#34d399', '#f59e0b', '#e040fb']
+const BAND_COLORS_ELEC = ['#818cf8', '#34d399', '#f59e0b', '#e040fb']
+const BAND_COLORS_GAS  = ['#22d3ee', '#06b6d4', '#0891b2', '#0e7490']
 
-export function TimeOfDayChart({ intervals, agileRates, isAgile, lang }: Props) {
+export function TimeOfDayChart({ intervals, agileRates, isAgile, lang, fuel = 'elec' }: Props) {
   // Pre-compute hour for each interval once — avoids repeated new Date() in nested loops
   const intervalsWithHour = useMemo(() =>
     intervals.map(iv => ({ iv, hour: new Date(iv.interval_start).getUTCHours() })),
@@ -65,7 +67,9 @@ export function TimeOfDayChart({ intervals, agileRates, isAgile, lang }: Props) 
     })
 
     return { days, data }
-  }, [intervalsWithHour, isAgile, agileRates, lang])
+  }, [intervalsWithHour, isAgile, agileRates, lang, fuel])
+
+  const BAND_COLORS = fuel === 'gas' ? BAND_COLORS_GAS : BAND_COLORS_ELEC
 
   if (!days.length) return null
 

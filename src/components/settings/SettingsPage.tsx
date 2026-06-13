@@ -1,15 +1,15 @@
 import { useState, useRef } from 'react'
-import { Download, Upload, Trash2, Key, Zap } from 'lucide-react'
+import { Download, Upload, Trash2, Key, Zap, Bell, Building2 } from 'lucide-react'
 import { useAppStore } from '../../store/useAppStore'
 import { t } from '../../lib/i18n'
 import { exportConfig, importConfig } from '../../lib/exportImport'
 import { LanguageToggle } from '../shared/LanguageToggle'
-import type { Credentials, TariffConfig, TariffType, OutgoingTariffType, DnoRegion } from '../../types'
+import type { Credentials, TariffConfig, TariffType, OutgoingTariffType, DnoRegion, AgileAlertConfig, PropertyInfo } from '../../types'
 
 export function SettingsPage() {
   const lang = useAppStore(s => s.config?.language ?? 'en')
   const config = useAppStore(s => s.config)
-  const { resetAll, saveCredentials, saveTariff, importSettings } = useAppStore()
+  const { resetAll, saveCredentials, saveTariff, importSettings, setAgileAlert, setProperties, setSelectedProperty } = useAppStore()
 
   const [importMsg, setImportMsg] = useState('')
   const [importOk, setImportOk] = useState(false)
@@ -17,6 +17,18 @@ export function SettingsPage() {
   const [editingCreds, setEditingCreds] = useState(false)
   const [editingTariff, setEditingTariff] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  // Agile alert state
+  const [alertEnabled, setAlertEnabled] = useState(config?.agileAlert?.enabled ?? false)
+  const [alertThreshold, setAlertThreshold] = useState(String(config?.agileAlert?.thresholdPence ?? '15'))
+  const [alertSaved, setAlertSaved] = useState(false)
+  const [alertDenied, setAlertDenied] = useState(false)
+
+  // Multi-property state
+  const [propLoading, setPropLoading] = useState(false)
+  const [propError, setPropError] = useState('')
+  const [properties, setLocalProperties] = useState<PropertyInfo[]>(config?.properties ?? [])
+  const [selectedPropIdx, setSelectedPropIdx] = useState(config?.selectedPropertyIndex ?? -1)
 
   // Editable credential fields
   const [apiKey, setApiKey] = useState(config?.credentials.apiKey ?? '')
@@ -58,6 +70,57 @@ export function SettingsPage() {
       setImportOk(false)
     }
     e.target.value = ''
+  }
+
+  async function handleSaveAlert() {
+    setAlertDenied(false)
+    if (alertEnabled) {
+      const perm = await Notification.requestPermission()
+      if (perm !== 'granted') {
+        setAlertDenied(true)
+        return
+      }
+    }
+    const cfg: AgileAlertConfig = { enabled: alertEnabled, thresholdPence: parseFloat(alertThreshold) || 15 }
+    setAgileAlert(cfg)
+    setAlertSaved(true)
+    setTimeout(() => setAlertSaved(false), 2000)
+  }
+
+  async function handleLoadProperties() {
+    if (!config?.credentials.apiKey || !config.credentials.accountNumber) return
+    setPropLoading(true)
+    setPropError('')
+    try {
+      const res = await fetch(
+        `https://api.octopus.energy/v1/accounts/${config.credentials.accountNumber}/`,
+        { headers: { Authorization: 'Basic ' + btoa(config.credentials.apiKey + ':') } }
+      )
+      if (!res.ok) throw new Error('HTTP ' + res.status)
+      const data = await res.json()
+      const props: PropertyInfo[] = (data.properties ?? []).map((p: { address_line_1?: string; postcode?: string; electricity_meter_points?: Array<{ mpan: string; is_export?: boolean; meters?: Array<{ serial_number: string }> }>; gas_meter_points?: Array<{ mprn: string; meters?: Array<{ serial_number: string }> }> }) => ({
+        address: [p.address_line_1, p.postcode].filter(Boolean).join(', ') || 'Property',
+        electricity: (p.electricity_meter_points ?? []).map((mp: { mpan: string; is_export?: boolean; meters?: Array<{ serial_number: string }> }) => ({
+          mpan: mp.mpan,
+          serialNumber: mp.meters?.[0]?.serial_number ?? '',
+          isExport: mp.is_export ?? false,
+        })),
+        gas: (p.gas_meter_points ?? []).map((mp: { mprn: string; meters?: Array<{ serial_number: string }> }) => ({
+          mprn: mp.mprn,
+          serialNumber: mp.meters?.[0]?.serial_number ?? '',
+        })),
+      }))
+      setLocalProperties(props)
+      setProperties(props)
+    } catch {
+      setPropError(t(lang, 'multiPropertyError'))
+    }
+    setPropLoading(false)
+  }
+
+  function handleApplyProperty(idx: number) {
+    setSelectedPropIdx(idx)
+    setSelectedProperty(idx)
   }
 
   function handleSaveCreds() {
@@ -278,6 +341,117 @@ export function SettingsPage() {
         )}
       </Section>
 
+      {/* Agile Rate Alert — only shown for Agile tariff users */}
+      {config?.tariff.type === 'agile' && (
+        <Section title={t(lang, 'agileAlertTitle')}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <label style={{ fontSize: '0.82rem', color: 'var(--color-text)' }}>{t(lang, 'agileAlertEnabled')}</label>
+              <button
+                onClick={() => setAlertEnabled(v => !v)}
+                style={{
+                  width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer',
+                  background: alertEnabled ? 'var(--color-success)' : 'var(--color-border)',
+                  position: 'relative', transition: 'background 0.2s',
+                }}
+              >
+                <span style={{
+                  position: 'absolute', top: 3, left: alertEnabled ? 22 : 4,
+                  width: 18, height: 18, borderRadius: 9, background: 'white',
+                  transition: 'left 0.2s', display: 'block',
+                }} />
+              </button>
+            </div>
+            <div>
+              <label className="label">{t(lang, 'agileAlertThreshold')}</label>
+              <input
+                className="input-field"
+                type="number"
+                step="0.1"
+                value={alertThreshold}
+                onChange={e => setAlertThreshold(e.target.value)}
+              />
+            </div>
+            {alertDenied && (
+              <p style={{ fontSize: '0.78rem', color: 'var(--color-danger)', margin: 0 }}>
+                {t(lang, 'agileAlertDenied')}
+              </p>
+            )}
+            <button
+              className="btn-primary"
+              onClick={handleSaveAlert}
+              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              <Bell size={15} />
+              {alertSaved ? t(lang, 'agileAlertSaved') : t(lang, 'agileAlertSave')}
+            </button>
+          </div>
+        </Section>
+      )}
+
+      {/* Multi-property selector */}
+      <Section title={t(lang, 'multiPropertyTitle')} desc={t(lang, 'multiPropertyDesc')}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <button
+            className="btn-secondary"
+            onClick={handleLoadProperties}
+            disabled={propLoading}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, opacity: propLoading ? 0.6 : 1 }}
+          >
+            <Building2 size={15} />
+            {propLoading ? t(lang, 'multiPropertyFetching') : t(lang, 'multiPropertyFetch')}
+          </button>
+          {propError && (
+            <p style={{ fontSize: '0.78rem', color: 'var(--color-danger)', margin: 0 }}>{propError}</p>
+          )}
+          {properties.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {properties.map((prop, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    padding: '0.6rem 0.8rem',
+                    borderRadius: 8,
+                    border: '1px solid',
+                    borderColor: selectedPropIdx === idx ? 'var(--color-accent)' : 'var(--color-border)',
+                    background: selectedPropIdx === idx ? 'rgba(224,64,251,0.08)' : 'var(--color-surface)',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                      {prop.address}
+                    </div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--color-muted)', marginTop: 2 }}>
+                      {prop.electricity.filter(e => !e.isExport).length} elec
+                      {prop.gas.length > 0 ? ` · ${prop.gas.length} gas` : ''}
+                      {prop.electricity.filter(e => e.isExport).length > 0 ? ' · solar' : ''}
+                    </div>
+                  </div>
+                  {selectedPropIdx !== idx && (
+                    <button
+                      className="btn-secondary"
+                      onClick={() => handleApplyProperty(idx)}
+                      style={{ fontSize: '0.75rem', padding: '0.3rem 0.7rem' }}
+                    >
+                      {t(lang, 'multiPropertyApply')}
+                    </button>
+                  )}
+                  {selectedPropIdx === idx && (
+                    <span style={{ fontSize: '0.75rem', color: 'var(--color-accent)', fontWeight: 700 }}>✓ Active</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          {properties.length === 0 && !propLoading && (
+            <p style={{ fontSize: '0.78rem', color: 'var(--color-muted)', margin: 0 }}>
+              {t(lang, 'multiPropertyNone')}
+            </p>
+          )}
+        </div>
+      </Section>
+
       {/* Reset */}
       <Section title={t(lang, 'resetData')} desc={t(lang, 'resetDesc')}>
         {!confirmReset ? (
@@ -330,7 +504,7 @@ export function SettingsPage() {
 
       {/* Version */}
       <div style={{ textAlign: 'center', marginTop: '2rem', color: 'var(--color-muted)', fontSize: '0.72rem' }}>
-        OctoEnergy v5.0.0
+        OctoEnergy v6.0.0
       </div>
     </div>
   )

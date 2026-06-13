@@ -50,12 +50,26 @@ export interface BudgetConfig {
   monthlyLimitPounds: number    // 0 = disabled
 }
 
+export interface AgileAlertConfig {
+  enabled: boolean
+  thresholdPence: number        // alert when rate drops below this
+}
+
+export interface PropertyInfo {
+  address: string               // human-readable label
+  electricity: { mpan: string; serialNumber: string; isExport: boolean; tariffCode?: string }[]
+  gas: { mprn: string; serialNumber: string }[]
+}
+
 export interface AppConfig {
   version: string
   language: Language
   credentials: Credentials
   tariff: TariffConfig
   budget?: BudgetConfig
+  agileAlert?: AgileAlertConfig
+  properties?: PropertyInfo[]   // loaded from account API
+  selectedPropertyIndex?: number
 }
 
 export interface ConsumptionInterval {

@@ -8,6 +8,8 @@ import type {
   ConsumptionInterval,
   AgileRate,
   BudgetConfig,
+  AgileAlertConfig,
+  PropertyInfo,
 } from '../types'
 
 const STORAGE_KEY = 'octoenergy_config'
@@ -82,6 +84,9 @@ interface AppState {
   setJustSetup: (v: boolean) => void
   isCacheStale: () => boolean
   touchRefresh: () => void
+  setAgileAlert: (cfg: AgileAlertConfig | null) => void
+  setProperties: (props: PropertyInfo[]) => void
+  setSelectedProperty: (index: number) => void
 }
 
 const savedConfig = loadConfig()
@@ -239,5 +244,51 @@ export const useAppStore = create<AppState>((set, get) => ({
     const cache: AppCache = { ...get().cache, lastRefresh: new Date().toISOString() }
     saveCache(cache)
     set({ cache })
+  },
+
+  setAgileAlert: (cfg) => {
+    const config = get().config
+    if (!config) return
+    const updated = { ...config, agileAlert: cfg ?? undefined }
+    saveConfig(updated)
+    set({ config: updated })
+  },
+
+  setProperties: (props) => {
+    const config = get().config
+    if (!config) return
+    const updated = { ...config, properties: props }
+    saveConfig(updated)
+    set({ config: updated })
+  },
+
+  setSelectedProperty: (index) => {
+    const config = get().config
+    if (!config) return
+    const props = config.properties
+    if (!props || index < 0 || index >= props.length) return
+    const prop = props[index]
+    // Pick first non-export elec meter and first gas meter from the selected property
+    const elecMeter = prop.electricity.find(e => !e.isExport) ?? prop.electricity[0]
+    const gasMeter = prop.gas[0] ?? null
+    const exportMeter = prop.electricity.find(e => e.isExport) ?? null
+    const updatedCreds: Credentials = {
+      ...config.credentials,
+      electricity: elecMeter
+        ? { mpan: elecMeter.mpan, serialNumber: elecMeter.serialNumber }
+        : config.credentials.electricity,
+      gas: gasMeter
+        ? { mprn: gasMeter.mprn, serialNumber: gasMeter.serialNumber }
+        : null,
+      outgoing: exportMeter
+        ? { mpan: exportMeter.mpan, serialNumber: exportMeter.serialNumber }
+        : null,
+    }
+    const updated = { ...config, credentials: updatedCreds, selectedPropertyIndex: index }
+    saveConfig(updated)
+    // Clear cache so new meters are fetched fresh
+    const freshCache: AppCache = { lastRefresh: null }
+    saveCache(freshCache)
+    set({ config: updated, cache: freshCache })
   },
 }))

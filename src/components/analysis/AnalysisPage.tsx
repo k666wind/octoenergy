@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Printer } from 'lucide-react'
 import { useAppStore } from '../../store/useAppStore'
 import { useDataFetch } from '../../hooks/useDataFetch'
 import { t } from '../../lib/i18n'
@@ -67,6 +68,26 @@ export function AnalysisPage({ onDayDrillDown }: AnalysisPageProps) {
     })
   }, [elecAll, elecDateCache, appliedFrom, appliedTo])
 
+  // Gas 30-day filtered intervals (same date range as elec)
+  const gasDateCache = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const iv of gasAll) {
+      if (!m.has(iv.interval_start)) {
+        m.set(iv.interval_start, new Date(iv.interval_start).toLocaleDateString('en-GB', {
+          timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit',
+        }).split('/').reverse().join('-'))
+      }
+    }
+    return m
+  }, [gasAll])
+
+  const gas30 = useMemo(() => {
+    return gasAll.filter(i => {
+      const d = gasDateCache.get(i.interval_start) ?? ''
+      return d >= appliedFrom && d <= appliedTo
+    })
+  }, [gasAll, gasDateCache, appliedFrom, appliedTo])
+
   // Top 5 most expensive days — memoised
   const top5 = useMemo(() => {
     const elecByDay = groupByDay(elec30)
@@ -84,9 +105,21 @@ export function AnalysisPage({ onDayDrillDown }: AnalysisPageProps) {
 
   return (
     <div style={{ padding: '1rem 1rem 5rem' }}>
-      <h1 style={{ margin: '0 0 1.2rem', fontSize: '1.3rem', fontWeight: 800 }}>
-        {t(lang, 'insights')}
-      </h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.2rem' }}>
+        <h1 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 800 }}>{t(lang, 'insights')}</h1>
+        <button
+          onClick={() => window.print()}
+          title={t(lang, 'exportPdfHint')}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 5,
+            background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+            borderRadius: 8, padding: '0.4rem 0.75rem', cursor: 'pointer',
+            fontSize: '0.78rem', color: 'var(--color-muted)', fontWeight: 600,
+          }}
+        >
+          <Printer size={14} /> {t(lang, 'exportPdf')}
+        </button>
+      </div>
 
       {isLoading && !hasData && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -151,6 +184,22 @@ export function AnalysisPage({ onDayDrillDown }: AnalysisPageProps) {
               lang={lang}
             />
           </div>
+
+          {/* Section A2: Gas Time of day */}
+          {hasGas && gas30.length > 0 && (
+            <div className="card" style={{ marginBottom: '1rem' }}>
+              <h2 style={{ margin: '0 0 1rem', fontSize: '0.95rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                {t(lang, 'timeOfDayGas')}
+              </h2>
+              <TimeOfDayChart
+                intervals={gas30}
+                agileRates={agileRates}
+                isAgile={false}
+                lang={lang}
+                fuel="gas"
+              />
+            </div>
+          )}
 
           {/* Section B: Heatmap */}
           <div className="card" style={{ marginBottom: '1rem' }}>
